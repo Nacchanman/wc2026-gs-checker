@@ -89,6 +89,28 @@ function judge(id, scenarios) {
   };
 }
 
+// ---------- 判定記号 ----------
+// レベル 4=◎ 3=○ 2=△ 1=▲ 0=×
+const SYM = [
+  { sym: "×", cls: "out",   label: "敗退決定" },
+  { sym: "▲", cls: "third", label: "2位以内は消滅。3位突破に望み(他グループ次第)" },
+  { sym: "△", cls: "maybe", label: "突破の可能性あり(他試合の結果次第)" },
+  { sym: "○", cls: "good",  label: "突破濃厚(同勝ち点で並ばれた場合のみ得失点差等の勝負)" },
+  { sym: "◎", cls: "ok",    label: "突破確定" },
+];
+const judgeLevel = j =>
+  j.qualified ? 4 : j.qualifiedOnGD ? 3 : j.canTop2 ? 2 : j.canThird ? 1 : 0;
+const symHtml = lvl =>
+  `<span class="sym sym-${SYM[lvl].cls}" title="${SYM[lvl].label}">${SYM[lvl].sym}</span>`;
+
+const NEXT_NOTES = [
+  "敗退が決定する",
+  "2位以内が消滅、3位の成績比較に懸ける",
+  "突破の可能性を残す(他試合の結果次第)",
+  "勝ち点で2位以内を確保(同勝ち点なら得失点差勝負)",
+  "その時点で突破確定",
+];
+
 // チームの次の未消化試合
 function nextMatchOf(id) {
   const t = teamById[id];
@@ -97,103 +119,112 @@ function nextMatchOf(id) {
     .sort((a, b) => a.date.localeCompare(b.date) || a.md - b.md)[0] || null;
 }
 
-// ---------- 突破条件の文章生成 ----------
+const patternLabel = (w, d, l) =>
+  [w ? `${w}勝` : "", d ? `${d}分` : "", l ? `${l}敗` : ""].join("") || "－";
+
+// 自チームの残り試合の結果組み合わせごとの最終勝ち点 → 判定の早見表
+function pointsOutlook(id, scenarios, ownRemaining, basePts) {
+  const k = ownRemaining.length;
+  const sides = ownRemaining.map(m => (m.home === id ? { win: "H", lose: "A" } : { win: "A", lose: "H" }));
+  const byPts = new Map();
+  for (let code = 0; code < Math.pow(3, k); code++) {
+    let c = code; const vec = [];
+    for (let i = 0; i < k; i++) { const o = c % 3; c = (c - o) / 3; vec.push(o); }
+    const subset = scenarios.filter(s => vec.every((o, i) => {
+      const oc = s.outcomes[ownRemaining[i].id];
+      return o === 0 ? oc === sides[i].win : o === 1 ? oc === "D" : oc === sides[i].lose;
+    }));
+    const lvl = judgeLevel(judge(id, subset));
+    const w = vec.filter(o => o === 0).length;
+    const d = vec.filter(o => o === 1).length;
+    const pts = basePts + 3 * w + d;
+    const e = byPts.get(pts) || { pts, lvl: 5, pats: new Set() };
+    e.lvl = Math.min(e.lvl, lvl); // 同勝ち点で複数パターンがある場合は厳しい方に倒す
+    e.pats.add(patternLabel(w, d, k - w - d));
+    byPts.set(pts, e);
+  }
+  return [...byPts.values()].sort((a, b) => b.pts - a.pts);
+}
+
+// ---------- 突破条件の分析 ----------
 function analyze(id) {
   const t = teamById[id];
   const { scenarios, remaining } = enumerateScenarios(t.group);
-  const ownRemaining = remaining.filter(m => m.home === id || m.away === id);
+  const ownRemaining = remaining
+    .filter(m => m.home === id || m.away === id)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.md - b.md);
   const overall = judge(id, scenarios);
   const table = computeTable(t.group);
   const pos = table.findIndex(r => r.id === id) + 1;
   const row = table[pos - 1];
-  const played = row.pld > 0;
   const groupStarted = table.some(r => r.pld > 0);
+  const lvl = judgeLevel(overall);
 
   // ステータス判定
   let status, badge;
-  if (overall.qualified) {
-    status = "突破確定";
-    badge = "ok";
-  } else if (!overall.canTop2 && overall.canThird) {
-    status = "3位突破に望み";
-    badge = "warn";
-  } else if (!overall.canTop2 && !overall.canThird) {
-    status = "敗退決定";
-    badge = "bad";
-  } else if (overall.qualifiedOnGD) {
-    status = "突破濃厚(得失点差次第)";
-    badge = "ok";
-  } else {
-    status = ownRemaining.length === 3 && !groupStarted ? "開幕前" : "突破争い中";
-    badge = "live";
-  }
+  if (overall.qualified) { status = "◎ 突破確定"; badge = "ok"; }
+  else if (lvl === 1) { status = "▲ 3位突破に望み"; badge = "warn"; }
+  else if (lvl === 0) { status = "× 敗退決定"; badge = "bad"; }
+  else if (overall.qualifiedOnGD) { status = "○ 突破濃厚"; badge = "ok"; }
+  else { status = !groupStarted ? "開幕前" : "△ 突破争い中"; badge = "live"; }
 
+  // 補足文(表で表しきれない情報のみ)
   const lines = [];
-
   if (!groupStarted) {
-    lines.push(`グループ${t.group}はまだ開幕前です。${matchLine(ownRemaining[0])} が初戦になります。`);
-    lines.push("各グループ上位2チームが決勝トーナメント(ラウンド32)に進出。さらに各グループ3位のうち成績上位8チーム(12組中)も進出します。");
-    lines.push("2連勝すれば突破がほぼ確実、勝ち点6で文句なし。勝ち点4でも突破有力、勝ち点3〜2は3位での突破に懸かるラインです。");
-  } else if (overall.qualified) {
-    lines.push("グループ2位以内が確定しました。残り試合の結果にかかわらず決勝トーナメント進出です。🎉");
-  } else if (!overall.canTop2 && overall.canThird) {
-    lines.push("グループ2位以内の可能性は消滅しました。3位に入り、各グループ3位の成績上位8チームに残れば突破できます(他グループの結果次第)。");
-  } else if (!overall.canTop2 && !overall.canThird) {
+    lines.push(`グループ${t.group}は開幕前。初戦は ${matchLine(ownRemaining[0])}。`);
+  }
+  if (overall.qualified) {
+    lines.push("残り試合の結果にかかわらず決勝トーナメント進出が決定しています。🎉");
+  } else if (lvl === 1) {
+    lines.push("3位に入り、各グループ3位の成績上位8チーム(12組中)に残れば突破できます。");
+  } else if (lvl === 0) {
     lines.push("グループステージ敗退が決定しました。");
-  } else {
-    if (overall.qualifiedOnGD) {
-      lines.push("勝ち点の上では2位以内をほぼ確保。同勝ち点で並ばれた場合のみ得失点差・総得点の勝負になります。");
-    }
-    // 自力突破の判定
-    if (ownRemaining.length > 0) {
-      const winAll = scenarios.filter(s =>
-        ownRemaining.every(m => s.outcomes[m.id] === (m.home === id ? "H" : "A")));
-      const jWin = judge(id, winAll);
-      if (jWin.qualified) {
-        lines.push(`残り${ownRemaining.length}試合に全て勝てば、他会場の結果にかかわらず突破が確定します(自力突破が可能)。`);
-      } else if (jWin.qualifiedOnGD) {
-        lines.push(`残り${ownRemaining.length}試合に全勝しても同勝ち点で並ぶ可能性があり、その場合は得失点差・総得点の勝負になります。`);
-      } else if (jWin.canTop2) {
-        lines.push("全勝しても自力では確定せず、他カードの結果次第です。");
-      }
-      // 引き分け以上で足りるか
+  } else if (ownRemaining.length > 0) {
+    const winAll = scenarios.filter(s =>
+      ownRemaining.every(m => s.outcomes[m.id] === (m.home === id ? "H" : "A")));
+    const jWin = judge(id, winAll);
+    if (jWin.qualified) {
+      lines.push(`残り${ownRemaining.length}試合に全勝すれば、他会場の結果に関係なく突破(自力突破が可能)。`);
       const drawPlus = scenarios.filter(s =>
         ownRemaining.every(m => {
           const o = s.outcomes[m.id];
           return o === "D" || o === (m.home === id ? "H" : "A");
         }));
-      if (!jWin.qualified ? false : judge(id, drawPlus).qualified) {
-        lines.push("残り試合は引き分け以上でも突破が確定します。");
+      if (judge(id, drawPlus).qualified) {
+        lines.push("残り試合すべて引き分け以上でも突破が確定します。");
       }
+    } else if (jWin.qualifiedOnGD) {
+      lines.push("全勝でも同勝ち点で並ぶ可能性があり、その場合は得失点差・総得点の勝負です。");
+    } else if (jWin.canTop2) {
+      lines.push("全勝しても自力では確定せず、他カードの結果次第です。");
     }
   }
 
-  // 次戦の勝ち・分け・負けシナリオ
+  // 次戦の勝敗別シナリオ
   const next = nextMatchOf(id);
   let nextBlock = null;
-  if (next && overall.canTop2 && !overall.qualified) {
+  if (next && lvl >= 1 && lvl <= 3) {
     const oppId = next.home === id ? next.away : next.home;
-    const cases = [];
     const defs = [
-      ["勝った場合", next.home === id ? "H" : "A"],
-      ["引き分けた場合", "D"],
-      ["負けた場合", next.home === id ? "A" : "H"],
+      ["勝ち", next.home === id ? "H" : "A"],
+      ["分け", "D"],
+      ["負け", next.home === id ? "A" : "H"],
     ];
-    for (const [labelTxt, oc] of defs) {
+    const cases = defs.map(([lab, oc]) => {
       const subset = scenarios.filter(s => s.outcomes[next.id] === oc);
-      const j = judge(id, subset);
-      let txt;
-      if (j.qualified) txt = "その時点で突破確定 🎉";
-      else if (j.qualifiedOnGD) txt = "勝ち点では2位以内を確保(同勝ち点なら得失点差次第)";
-      else if (j.canTop2) txt = "突破の可能性あり(他の結果次第)";
-      else if (j.canThird) txt = "2位以内は消滅、3位突破に懸ける";
-      else txt = "敗退が決定";
-      cases.push({ label: labelTxt, txt });
-    }
+      const cl = judgeLevel(judge(id, subset));
+      return { label: lab, lvl: cl, note: NEXT_NOTES[cl] };
+    });
     nextBlock = { match: next, opp: oppId, cases };
   }
 
-  return { team: t, status, badge, lines, nextBlock, table, pos, groupStarted, remaining: ownRemaining };
+  // 勝ち点早見表
+  let outlook = null;
+  if (ownRemaining.length > 0 && lvl >= 1 && lvl <= 3) {
+    outlook = pointsOutlook(id, scenarios, ownRemaining, row.pts);
+  }
+
+  return { team: t, status, badge, lvl, lines, nextBlock, outlook, table, pos, groupStarted, remaining: ownRemaining };
 }
 
 function matchLine(m) {
@@ -228,8 +259,10 @@ function render(id) {
 
   $("#conditions").innerHTML = `
     <h2>📋 突破条件</h2>
-    <ul>${a.lines.map(l => `<li>${esc(l)}</li>`).join("")}</ul>
-    ${a.nextBlock ? renderNextBlock(a.nextBlock) : ""}`;
+    ${a.nextBlock ? renderNextBlock(a.nextBlock) : ""}
+    ${a.outlook ? renderOutlook(a) : ""}
+    ${(a.nextBlock || a.outlook) ? renderLegend() : ""}
+    ${a.lines.length ? `<ul class="notes">${a.lines.map(l => `<li>${esc(l)}</li>`).join("")}</ul>` : ""}`;
 
   $("#standings").innerHTML = renderStandings(a);
   $("#fixtures").innerHTML = renderFixtures(t);
@@ -244,9 +277,43 @@ function renderNextBlock(nb) {
   return `
     <div class="next-match">
       <div class="next-title">⚔️ 次戦: ${fmtDate(m.date)} vs ${label(nb.opp)} <span class="md">第${m.md}節・${esc(m.venue)}</span></div>
-      <table class="case-table">
-        ${nb.cases.map(c => `<tr><th>${esc(c.label)}</th><td>${esc(c.txt)}</td></tr>`).join("")}
+      <table class="sym-table">
+        <thead><tr><th>結果</th><th>判定</th><th>補足</th></tr></thead>
+        <tbody>
+          ${nb.cases.map(c => `
+            <tr>
+              <td class="case-label">${esc(c.label)}</td>
+              <td>${symHtml(c.lvl)}</td>
+              <td class="note-cell">${esc(c.note)}</td>
+            </tr>`).join("")}
+        </tbody>
       </table>
+    </div>`;
+}
+
+function renderOutlook(a) {
+  return `
+    <div class="outlook">
+      <div class="next-title">🎯 最終勝ち点別の見通し <span class="md">残り${a.remaining.length}試合</span></div>
+      <table class="sym-table">
+        <thead><tr><th>最終勝ち点</th><th>残り試合の結果</th><th>判定</th></tr></thead>
+        <tbody>
+          ${a.outlook.map(r => `
+            <tr>
+              <td class="pts">${r.pts}</td>
+              <td class="note-cell">${[...r.pats].join(" / ")}</td>
+              <td>${symHtml(r.lvl)}</td>
+            </tr>`).join("")}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+function renderLegend() {
+  return `
+    <div class="sym-legend">
+      ${[4, 3, 2, 1, 0].map(l =>
+        `<span>${symHtml(l)} ${esc(SYM[l].label)}</span>`).join("")}
     </div>`;
 }
 

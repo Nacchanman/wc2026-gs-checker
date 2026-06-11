@@ -149,7 +149,7 @@ h2 { font-size: 16px; margin: 0 0 12px; }
 #conditions ul { margin: 0; padding-left: 22px; }
 #conditions li { margin-bottom: 8px; }
 
-.next-match {
+.next-match, .outlook {
   margin-top: 14px;
   background: var(--card2);
   border-radius: 10px;
@@ -157,17 +157,44 @@ h2 { font-size: 16px; margin: 0 0 12px; }
 }
 .next-title { font-weight: 700; margin-bottom: 8px; }
 .next-title .md { font-weight: 400; color: var(--muted); font-size: 12px; margin-left: 8px; }
-.case-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-.case-table th {
-  width: 9em;
+
+/* 判定記号テーブル */
+.sym-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.sym-table thead th {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 12px;
   text-align: left;
-  padding: 6px 8px;
-  color: var(--accent);
-  font-weight: 700;
-  border-top: 1px solid var(--line);
+  padding: 4px 8px;
 }
-.case-table td { padding: 6px 8px; border-top: 1px solid var(--line); }
-.case-table tr:first-child th, .case-table tr:first-child td { border-top: none; }
+.sym-table td { padding: 7px 8px; border-top: 1px solid var(--line); }
+.sym-table .case-label { font-weight: 700; color: var(--accent); width: 5em; }
+.sym-table .pts { width: 6em; text-align: center; }
+.sym-table .note-cell { color: var(--muted); font-size: 13px; }
+.sym {
+  display: inline-block;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+}
+.sym-ok    { color: var(--ok); }
+.sym-good  { color: #8fd99f; }
+.sym-maybe { color: var(--warn); }
+.sym-third { color: #f08c3c; }
+.sym-out   { color: var(--bad); }
+
+.sym-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.sym-legend .sym { font-size: 13px; }
+
+.notes { margin: 12px 0 0; padding-left: 22px; }
+.notes li { margin-bottom: 6px; }
 
 table.standings, table.fixtures {
   width: 100%;
