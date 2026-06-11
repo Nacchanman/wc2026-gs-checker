@@ -183,6 +183,38 @@ h2 { font-size: 16px; margin: 0 0 12px; }
 .sym-third { color: #f08c3c; }
 .sym-out   { color: var(--bad); }
 
+/* 「他試合の結果次第」の条件分岐 */
+.cond-row > td { padding: 0 8px 10px !important; border-top: none !important; }
+.cond-details {
+  background: rgba(232, 185, 49, 0.06);
+  border: 1px solid rgba(232, 185, 49, 0.25);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+.cond-details summary {
+  cursor: pointer;
+  color: var(--warn);
+  font-weight: 600;
+  user-select: none;
+}
+.cond-details summary:hover { opacity: 0.8; }
+.cond-item { margin-top: 10px; }
+.cond-match { color: var(--muted); margin-bottom: 6px; }
+.cond-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 12px;
+  white-space: nowrap;
+}
+.chip .sym { font-size: 15px; }
+.cond-none { margin: 8px 0 2px; color: var(--muted); }
+
 .sym-legend {
   display: flex;
   flex-wrap: wrap;

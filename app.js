@@ -122,6 +122,27 @@ function nextMatchOf(id) {
 const patternLabel = (w, d, l) =>
   [w ? `${w}勝` : "", d ? `${d}分` : "", l ? `${l}敗` : ""].join("") || "－";
 
+// 「他試合の結果次第」の内訳: 自分以外の残り試合それぞれについて、
+// その試合の結果(ホーム勝ち/分け/アウェイ勝ち)ごとに判定を計算する。
+// 親と同じ判定にしかならない(=条件として意味がない)試合は除外。
+function condBreakdown(id, subset, remaining, ownRemaining, parentLvl) {
+  const ownIds = new Set(ownRemaining.map(m => m.id));
+  const others = remaining.filter(m => !ownIds.has(m.id));
+  const rows = [];
+  for (const m of others) {
+    const cells = [
+      ["H", `${teamById[m.home].flag} ${teamById[m.home].ja}が勝ち`],
+      ["D", "引き分け"],
+      ["A", `${teamById[m.away].flag} ${teamById[m.away].ja}が勝ち`],
+    ].map(([oc, lab]) => ({
+      lab,
+      lvl: judgeLevel(judge(id, subset.filter(s => s.outcomes[m.id] === oc))),
+    }));
+    if (cells.some(c => c.lvl !== parentLvl)) rows.push({ match: m, cells });
+  }
+  return rows;
+}
+
 // 自チームの残り試合の結果組み合わせごとの最終勝ち点 → 判定の早見表
 function pointsOutlook(id, scenarios, ownRemaining, basePts) {
   const k = ownRemaining.length;
@@ -213,7 +234,10 @@ function analyze(id) {
     const cases = defs.map(([lab, oc]) => {
       const subset = scenarios.filter(s => s.outcomes[next.id] === oc);
       const cl = judgeLevel(judge(id, subset));
-      return { label: lab, lvl: cl, note: NEXT_NOTES[cl] };
+      const detail = cl === 2
+        ? condBreakdown(id, subset, remaining, ownRemaining, cl)
+        : null;
+      return { label: lab, lvl: cl, note: NEXT_NOTES[cl], detail };
     });
     nextBlock = { match: next, opp: oppId, cases };
   }
@@ -285,10 +309,27 @@ function renderNextBlock(nb) {
               <td class="case-label">${esc(c.label)}</td>
               <td>${symHtml(c.lvl)}</td>
               <td class="note-cell">${esc(c.note)}</td>
-            </tr>`).join("")}
+            </tr>
+            ${c.detail ? `<tr class="cond-row"><td colspan="3">${renderCondDetail(c)}</td></tr>` : ""}`).join("")}
         </tbody>
       </table>
     </div>`;
+}
+
+function renderCondDetail(c) {
+  const inner = c.detail.length
+    ? c.detail.map(r => `
+        <div class="cond-item">
+          <div class="cond-match">第${r.match.md}節 ${label(r.match.home)} vs ${label(r.match.away)} の結果別:</div>
+          <div class="cond-chips">${r.cells.map(cell =>
+            `<span class="chip">${cell.lab} → ${symHtml(cell.lvl)}</span>`).join("")}</div>
+        </div>`).join("")
+    : `<p class="cond-none">グループ内のどれか1試合の結果だけでは決まらず、複数試合の組み合わせ次第です。試合が進むと具体的な条件が表示されます。</p>`;
+  return `
+    <details class="cond-details">
+      <summary>「${esc(c.label)}」の場合、他試合がどうなれば突破?</summary>
+      ${inner}
+    </details>`;
 }
 
 function renderOutlook(a) {
