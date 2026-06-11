@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2026 W杯 グループステージ突破条件チェッカー</title>
+  <meta name="description" content="2026 FIFAワールドカップ 各国のグループステージ突破条件をチェック">
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>">
+</head>
+<body>
+  <header>
+    <h1>⚽ 2026 W杯 突破条件チェッカー<small>FIFA World Cup 26™</small></h1>
+    <div class="searchbox">
+      <input id="search-input" type="text" placeholder="国名で検索…" autocomplete="off" aria-label="国名で検索">
+      <button id="search-toggle" type="button" aria-label="国一覧を開く">▼</button>
+      <div id="dropdown" role="listbox"></div>
+    </div>
+  </header>
+
+  <main>
+    <div id="hero"></div>
+    <section id="conditions"></section>
+    <section id="standings"></section>
+    <section id="fixtures"></section>
+    <section id="thirds"></section>
+  </main>
+
+  <footer>
+    <p id="updated"></p>
+    <p>各グループ上位2チーム+各グループ3位の成績上位8チームがラウンド32へ進出。</p>
+    <p>順位決定方式(勝ち点→得失点差→総得点ほか)に基づく非公式の計算です。</p>
+  </footer>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
